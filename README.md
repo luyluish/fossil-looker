@@ -1,4 +1,4 @@
-# 🦖 FossilLooker — Classificador de Fósseis de Dinossauro em Experta!
+# 🦖 FossilLooker
 
 ## Introdução
 
