@@ -1,4 +1,4 @@
-# 🦖 FossilLooker
+# 🦖 Fossil Looker
 
 ## Introdução
 
