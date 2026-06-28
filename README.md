@@ -2,15 +2,42 @@
 
 ## Introdução
 
-Fósseis de dinossauros podem ser diferenciados de acordo com características visuais identificadas nos próprios fósseis. Seguindo uma hierarquia taxonômica, o sistema de classificação pode ser definido como um algoritmo que começa coletando informações mais superficiais, como a disposição do fóssil (Bípede/Quadrúpede) e vai afunilando características mais específicas, como presença de apêndices, comprimento dos membros, garras, formatos dos dentes, e etc, em uma ordem que começa lá nos clados e se especifica apenas em diferenças mínimas.
+Fósseis de dinossauros podem ser diferenciados de acordo com características visuais identificadas nos próprios fósseis. Seguindo uma hierarquia taxonômica, o sistema de classificação começa coletando informações mais superficiais — como morfologia dental e modo de locomoção — e vai afunilando em características mais específicas, como tipo de apêndice e tamanho estimado do espécime.
 
-A ideia desse sistema é dar a possibilidade do usuário fornecer todas as características que ele consegue ver no fóssil, independente de ordem ou prioridade, e através de uma série de regras, o sistema percorrer a hierarquia de níveis para inferir qual o espécime (ou gênero, já que as diferenças de espécie são muitas vezes bem mínimas). 
+A versão **Mini-Projeto 2** abandona as regras IF–THEN nítidas (*crisp*) do MP1 e adota **inferência fuzzy Mamdani** via *scikit-fuzzy*. Em vez de respostas binárias (`afiados` ou `achatados`), o usuário agora fornece **graus** para cada característica em uma escala de 0 a 10. O sistema tolera incerteza, o que faz muito mais sentido quando se está olhando para um fóssil de 66 milhões de anos.
 
-A inferência acontece em 3 níveis:
+O elenco também cresceu: saímos de **8 dinossauros** para **15**. Bem-vindo ao Jurássico aumentado.
 
-1. Características visuais
-2. Agrupamento taxonômico
-3. Classificação de espécie
+A inferência ainda acontece em 3 níveis conceituais:
+
+1. Características visuais (graus de pertinência nas variáveis de entrada)
+2. Agrupamento taxonômico (terópodes, ornitópodes, outros herbívoros)
+3. Classificação de espécie (defuzzificação pelo centroide)
+
+---
+
+## Arquitetura do Sistema
+
+O Fossil Looker Fuzzy é um controlador **Mamdani** com **4 entradas** e **1 saída**.
+
+### Variáveis de Entrada
+
+| Variável | Escala | Termos Linguísticos |
+|---|---|---|
+| `dentes` | 0–10 | *afiados*, *mistos*, *achatados* |
+| `locomocao` | 0–10 | *bipede*, *misto*, *quadrupede* |
+| `appendice` | 0–10 | *chifres*, *crista*, *dorsal* |
+| `tamanho` | 0–10 | *pequeno*, *medio*, *grande* |
+
+> 0 = extremo esquerdo do termo, 10 = extremo direito. Os valores intermediários ativam múltiplos termos simultaneamente — esse é justamente o ponto.
+
+### Variável de Saída
+
+| Variável | Escala | Termos |
+|---|---|---|
+| `especie` | 0–14 | Um índice por dinossauro (15 no total) |
+
+Cada dinossauro ocupa uma "fatia" do universo de saída com uma gaussiana. A defuzzificação pelo método **centroide** devolve o índice do espécime mais provável dado o conjunto de entradas.
 
 ---
 
@@ -18,33 +45,73 @@ A inferência acontece em 3 níveis:
 
 ### 🔹 Nível 1 — Características visuais
 
-* Regra 1: Se tem dentes afiados → é carnívoro
-* Regra 2: Se tem dentes achatados → é herbívoro
-* Regra 3: Se a disposição é bípede → locomoção bípede
-* Regra 4: Se a disposição é quadrúpede → locomoção quadrúpede
+* Regra de dentes: quanto mais próximo de 0, mais afiados (carnívoro); quanto mais próximo de 10, mais achatados (herbívoro); valores intermediários indicam dentição mista
+* Regra de locomoção: 0 = bípede puro; 10 = quadrúpede puro; valores em torno de 5 capturam espécimes facultativos como o Iguanodon
+* Regra de apêndice: 0–3 = chifres; 3–7 = crista craniana; 7–10 = apêndice dorsal (velas, placas)
+* Regra de tamanho: 0–3 = pequeno (<3m); 3–7 = médio (3–8m); 7–10 = grande (>8m)
 
 ---
 
 ### 🔹 Nível 2 — Agrupamento taxonômico
 
-* Regra 5: Se é carnívoro e é bípede, é do grupo Terópode
-* Regra 6: Se é carnívoro e quadrúpede, ele não existe, porque não tem registros destes. Logo, o sistema gera um erro
-* Regra 7: Se é herbívoro e bípede, é do grupo Ornitópode
-* Regra 8: Se é herbívoro e quadrúpede, ele se encaixa em um dos outros grupos de Herbíviros
+* Dentes afiados + bípede → **Terópode**
+* Dentes achatados + bípede (ou misto) → **Ornitópode**
+* Dentes achatados + quadrúpede → **Outro Herbívoro**
+* Combinações com alta ambiguidade → o sistema não trava: ele simplesmente não dispara nenhuma regra com força suficiente, retornando um centroide sem classificação confiante
 
 ---
 
 ### 🔹 Nível 3 — Classificação de espécie
 
-* Regra 9: Se é terópode e tem chifres, é um Ceratosaurus
-* Regra 10: Se é Terópode e possui um apêndice dorsal, é um Spinosaurus
-* Regra 11: Se é Terópode e possui uma crista, é um Cryolophosaurus
-* Regra 12: Se é Ornitópode e possui um apêndice dorsal, é um Ouranosaurus
-* Regra 13: Se é Ornitópode e possui uma crista, é um Parasaurolophus
-* Regra 14: Se é Ornitópode e tem chifres, ele não existe, porque não tem registro destes também. O sistema lança um erro
-* Regra 15: Se é outro grupo dos herbívoros e tem chifres, é um Triceratops
-* Regra 16: Se é de outro grupo dos herbívoros e possui um apêndice dorsal, é um Stegosaurus
-* Regra 17: Se é de outro grupo dos herbívoros e possui uma crista, é um Pachyrhinosaurus
+#### Terópodes (carnívoros bípedes)
+
+* **R1:** Afiados + Bípede + Chifres + Pequeno → Velociraptor
+* **R2:** Afiados + Bípede + Chifres + Grande → T-Rex
+* **R3:** Afiados + Bípede + Dorsal + Grande → Spinosaurus
+* **R4:** Afiados + Bípede + Chifres + Médio → Ceratosaurus
+* **R5:** Afiados + Bípede + Crista + Pequeno → Cryolophosaurus
+* **R6:** Afiados + Bípede + Crista + Médio → Allosaurus
+* **R7:** Afiados + Bípede + Dorsal + Médio → Carnotaurus
+
+#### Ornitópodes (herbívoros bípedes ou facultativos)
+
+* **R8:** Achatados + Bípede + Crista + Grande → Parasaurolophus
+* **R9:** Achatados + Misto + Chifres + Médio → Iguanodon
+* **R10:** Achatados + Bípede + Dorsal + Médio → Ouranosaurus
+* **R11:** Achatados + Misto + Crista + Grande → Corythosaurus
+
+#### Outros Herbívoros (quadrúpedes)
+
+* **R12:** Achatados + Quadrúpede + Chifres + Grande → Triceratops
+* **R13:** Achatados + Quadrúpede + Dorsal + Médio → Stegosaurus
+* **R14:** Achatados + Quadrúpede + Dorsal + Grande → Ankylosaurus
+* **R15:** Achatados + Quadrúpede + Crista + Grande → Brachiosaurus
+
+> Diferente do MP1, não há "regras de erro". Combinações biologicamente improváveis simplesmente produzem uma classificação de baixa confiança — o sistema degrada com graciosidade.
+
+---
+
+## Roster Completo
+
+Referência rápida de como cada espécime se mapeia nas escalas de entrada.
+
+| Dinossauro | Dentes | Locomoção | Apêndice | Tamanho | Grupo |
+|---|---|---|---|---|---|
+| Velociraptor | 1.0 | 1.0 | 1.0 | 1.0 | Terópode |
+| T-Rex | 1.0 | 1.0 | 1.0 | 9.0 | Terópode |
+| Spinosaurus | 1.0 | 1.0 | 9.0 | 9.5 | Terópode |
+| Ceratosaurus | 1.5 | 1.0 | 1.5 | 5.0 | Terópode |
+| Cryolophosaurus | 1.0 | 1.0 | 5.0 | 2.0 | Terópode |
+| Allosaurus | 1.0 | 1.0 | 5.0 | 6.0 | Terópode |
+| Carnotaurus | 1.0 | 1.0 | 8.0 | 5.0 | Terópode |
+| Parasaurolophus | 9.5 | 1.0 | 5.0 | 8.5 | Ornitópode |
+| Iguanodon | 8.0 | 5.0 | 1.5 | 5.5 | Ornitópode |
+| Ouranosaurus | 9.0 | 1.0 | 9.0 | 5.0 | Ornitópode |
+| Corythosaurus | 9.0 | 4.0 | 5.0 | 8.0 | Ornitópode |
+| Triceratops | 8.5 | 9.0 | 1.0 | 8.0 | Outro Herbívoro |
+| Stegosaurus | 9.0 | 9.0 | 9.0 | 5.0 | Outro Herbívoro |
+| Ankylosaurus | 9.0 | 9.0 | 9.0 | 8.0 | Outro Herbívoro |
+| Brachiosaurus | 9.0 | 9.0 | 5.0 | 9.5 | Outro Herbívoro |
 
 ---
 
@@ -55,24 +122,27 @@ A inferência acontece em 3 níveis:
 ![Spinosaurus](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Spinosaurus_aegyptiacus_life_reconstruction.png/1920px-Spinosaurus_aegyptiacus_life_reconstruction.png)
 
 ```python
-engine.declare(Dino(
-    dentes='afiados',
-    bipede=True,
-    dorsal=True
-))
+identificar(
+    dentes_val=1.0,
+    locomocao_val=1.0,
+    appendice_val=9.0,
+    tamanho_val=9.5
+)
 ```
 
 **Resultado esperado:**
 
 ```
-R1: carnívoro
-R3: bípede
-R5: harnívoro e bípede => Terópode
-R10: terópode e apêndice dorsal => Spinosaurus
+Dentes    : 1.0  (afiados)
+Locomoção : 1.0  (bípede)
+Apêndice  : 9.0  (dorsal)
+Tamanho   : 9.5  (grande)
+Saída defuzzificada: ~2.0
+🦕 DINOSSAURO IDENTIFICADO: SPINOSAURUS
 ```
 
 **Motivo:**
-A combinação de dieta carnívora + locomoção bípede leva a terópode, e a presença de apêndice dorsal ativa a regra específica do Spinosaurus.
+Dentes cônicos afiados e locomoção bípede levam ao grupo terópode. A vela dorsal proeminente (apêndice=9.0) combinada com o porte gigantesco (tamanho=9.5) ativa a R3 com força máxima, puxando o centroide para o índice do Spinosaurus.
 
 ---
 
@@ -81,45 +151,108 @@ A combinação de dieta carnívora + locomoção bípede leva a terópode, e a p
 ![Parasaurolophus](https://upload.wikimedia.org/wikipedia/commons/3/3b/Parasaurolophus_walkeri.png)
 
 ```python
-engine.declare(Dino(
-    dentes='achatados',
-    bipede=True,
-    crista=True
-))
+identificar(
+    dentes_val=9.5,
+    locomocao_val=1.0,
+    appendice_val=5.0,
+    tamanho_val=8.5
+)
 ```
 
 **Resultado esperado:**
 
 ```
-R2: herbívoro
-R3: bípede
-R7: herbívoro e bípede => Ornitopode
-R13: ornitópode e crista => Parasaurolophus
+Dentes    : 9.5  (achatados)
+Locomoção : 1.0  (bípede)
+Apêndice  : 5.0  (crista)
+Tamanho   : 8.5  (grande)
+Saída defuzzificada: ~7.0
+🦕 DINOSSAURO IDENTIFICADO: PARASAUROLOPHUS
 ```
 
 **Motivo:**
-Ornitópodes com crista são classificados como Parasaurolophus, e os NOTs evitam conflito com outras regras.
+Dentição altamente achatada + bipedalismo leva ao grupo ornitópode. A crista craniana tubular (apêndice=5.0) e o porte grande (tamanho=8.5) ativam a R8 com força dominante, apontando direto para o Parasaurolophus.
 
 ---
 
-### ❌ Caso 3 — Entrada Inválida
+### ✅ Caso 3 — Triceratops
 
-![Invalid](https://cdn.drawception.com/drawings/110846/pLSG3336.png)
+![Triceratops](https://cdn.sanity.io/images/wxr9jaaa/production/9fb5058673843f49acb43553180389bfb6b4817e-1376x768.png)
 
 ```python
-engine.declare(Dino(
-    dentes='afiados',
-    quadrupede=True
-))
+identificar(
+    dentes_val=8.5,
+    locomocao_val=9.0,
+    appendice_val=1.0,
+    tamanho_val=8.0
+)
 ```
 
 **Resultado esperado:**
 
 ```
-R1: carnívoro
-R4: quadrúpede
-R6: ERRO - Não existiram dinossauros carnívoros quadrúpedes.
+Dentes    : 8.5  (achatados)
+Locomoção : 9.0  (quadrúpede)
+Apêndice  : 1.0  (chifres)
+Tamanho   : 8.0  (grande)
+Saída defuzzificada: ~11.0
+🦕 DINOSSAURO IDENTIFICADO: TRICERATOPS
 ```
 
 **Motivo:**
-O sistema define que não existem dinossauros carnívoros quadrúpedes, então a regra R6 detecta a inconsistência.
+Herbívoro quadrúpede robusto com três chifres proeminentes e porte grande. A R12 dispara com força máxima, sem competição de outras regras do grupo.
+
+---
+
+### 🔬 Caso Bônus — Iguanodon
+
+![Iguanodon](https://www.dododex.com/media/creature/iguanodon.png)
+
+O Iguanodon é o dinossauro que mais quebrava o modelo do MP1: ele era facultativamente bípede, o que não se encaixava em nenhuma categoria crisp. Aqui, `locomocao=5.0` captura isso sem exigir uma regra especial.
+
+```python
+identificar(
+    dentes_val=8.0,
+    locomocao_val=5.0,
+    appendice_val=1.5,
+    tamanho_val=5.5
+)
+```
+
+**Resultado esperado:**
+
+```
+Dentes    : 8.0  (achatados)
+Locomoção : 5.0  (misto)
+Apêndice  : 1.5  (chifres)
+Tamanho   : 5.5  (médio)
+🦕 DINOSSAURO IDENTIFICADO: IGUANODON
+```
+
+**Motivo:**
+Este é o caso que o MP1 nunca conseguiria resolver com elegância. O valor `locomocao=5.0` cai exatamente no pico do termo `misto`, ativando a R9 com pertinência plena. O fuzzy absorve a nuance biológica sem nenhuma gambiarra.
+
+---
+
+## Comparativo: MP1 (Regras Crisp) vs MP2 (Fuzzy Mamdani)
+
+| Critério | MP1 (crisp) | MP2 (fuzzy Mamdani) |
+|---|---|---|
+| Entradas | Booleanas / enum | Valores contínuos 0–10 |
+| Nº de dinossauros | 8 | 15 |
+| Nº de regras | 17 (incluindo regras de erro) | 15 (sem regras de erro) |
+| Ambiguidade | Sem suporte | Graus de pertinência |
+| Iguanodon (facultativo) | Não modelável | `locomocao=5.0` |
+| Fóssil incompleto | Trava / lança erro | Inferência parcial com baixa confiança |
+| Complexidade de extensão | Alta (novas regras de conflito) | Baixa (nova MF + 1 nova regra) |
+| Expressividade | Binária | Gradual / linguística |
+
+**Pontos-chave:**
+
+1. **Tratamento de erro:** O MP1 precisava de regras explícitas para combinações inválidas (carnívoro quadrúpede, ornitópode com chifre). O MP2 simplesmente não dispara nenhuma regra forte para esses casos — menos regras, degradação mais graciosa.
+
+2. **Expressividade:** "Dentes levemente afiados" não existia no MP1. Com `dentes=3.5`, o sistema calcula pertinência simultânea em `afiados` (0.3) e `mistos` (0.6), refletindo a incerteza real de um fóssil fragmentado.
+
+3. **Escalabilidade:** Adicionar um dinossauro no MP1 exigia revisar todas as regras de conflito. No MP2, basta acrescentar uma gaussiana na saída e uma nova regra de antecedente.
+
+4. **Trade-off de auditabilidade:** O fuzzy perdeu a clareza diagnóstica do MP1. Antes, você sabia exatamente qual regra disparou. Agora, múltiplas regras disparam com pesos diferentes — o resultado é correto, mas menos auditável.
